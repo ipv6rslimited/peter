@@ -40,8 +40,14 @@ func (p *Peter) Start() {
   }
 
   wg.Add(2)
-  go copyConn(p.backend, p.client)
-  go copyConn(p.client, p.backend)
+  go func() {
+    copyConn(p.backend, p.client)
+    p.client.Close()
+  }()
+  go func() {
+    copyConn(p.client, p.backend)
+    p.backend.Close()
+  }()
 
   wg.Wait()
 }
