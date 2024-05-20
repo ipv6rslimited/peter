@@ -36,17 +36,14 @@ func (p *Peter) Start() {
   copyConn := func(dst net.Conn, src net.Conn) {
     defer wg.Done()
     io.Copy(dst, src)
-    dst.Close()
   }
 
   wg.Add(2)
   go func() {
     copyConn(p.backend, p.client)
-    p.client.Close()
   }()
   go func() {
     copyConn(p.client, p.backend)
-    p.backend.Close()
   }()
 
   wg.Wait()
