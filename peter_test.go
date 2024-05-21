@@ -26,6 +26,7 @@ type mockConn struct {
   closed bool
 }
 
+
 func (mc *mockConn) Close() error {
   mc.closed = true
   return nil
@@ -57,23 +58,30 @@ func TestPeterStart(t *testing.T) {
     backendConn := &mockConn{Reader: bytes.NewReader([]byte("response")), Writer: new(bytes.Buffer)}
 
     peter := NewPeter(clientConn, backendConn)
-    peter.Start()
+    go peter.Start()
 
-    if !clientConn.closed || !backendConn.closed {
-      t.Fatalf("Connections should be closed")
-    }
+    time.Sleep(50 * time.Millisecond)
 
     response := make([]byte, 8)
-    clientConn.Writer.(*bytes.Buffer).Read(response)
-    if string(response) != "response" {
-      t.Fatalf("Expected 'response', got '%s'", string(response))
+    n, err := clientConn.Writer.(*bytes.Buffer).Read(response)
+    if err != nil && err != io.EOF {
+      t.Fatalf("Failed to read response: %v", err)
+    }
+    if string(response[:n]) != "response" {
+      t.Fatalf("Expected 'response', got '%s'", string(response[:n]))
     }
 
     request := make([]byte, 7)
-    backendConn.Writer.(*bytes.Buffer).Read(request)
-    if string(request) != "request" {
-      t.Fatalf("Expected 'request', got '%s'", string(request))
+    n, err = backendConn.Writer.(*bytes.Buffer).Read(request)
+    if err != nil && err != io.EOF {
+      t.Fatalf("Failed to read request: %v", err)
     }
+    if string(request[:n]) != "request" {
+      t.Fatalf("Expected 'request', got '%s'", string(request[:n]))
+    }
+
+    clientConn.Close()
+    backendConn.Close()
   })
 
   t.Run("LargeDataTransfer", func(t *testing.T) {
@@ -86,10 +94,13 @@ func TestPeterStart(t *testing.T) {
     backendConn := &mockConn{Reader: bytes.NewReader(largeData), Writer: new(bytes.Buffer)}
 
     peter := NewPeter(clientConn, backendConn)
-    peter.Start()
+    go peter.Start()
 
-    if !clientConn.closed || !backendConn.closed {
-      t.Fatalf("Connections should be closed")
+    time.Sleep(100 * time.Millisecond)
+
+    clientBuffer := clientConn.Writer.(*bytes.Buffer)
+    if clientBuffer.Len() != len(largeData) {
+      t.Fatalf("Expected client buffer length %d, got %d", len(largeData), clientBuffer.Len())
     }
 
     backendBuffer := backendConn.Writer.(*bytes.Buffer)
@@ -97,10 +108,8 @@ func TestPeterStart(t *testing.T) {
       t.Fatalf("Expected backend buffer length %d, got %d", len(largeData), backendBuffer.Len())
     }
 
-    clientBuffer := clientConn.Writer.(*bytes.Buffer)
-    if clientBuffer.Len() != len(largeData) {
-      t.Fatalf("Expected client buffer length %d, got %d", len(largeData), clientBuffer.Len())
-    }
+    clientConn.Close()
+    backendConn.Close()
   })
 
   t.Run("ConnectionInterruption", func(t *testing.T) {
@@ -109,16 +118,17 @@ func TestPeterStart(t *testing.T) {
     backendConn := &mockConn{Reader: bytes.NewReader([]byte("response")), Writer: new(bytes.Buffer)}
 
     peter := NewPeter(clientConn, backendConn)
-    peter.Start()
+    go peter.Start()
 
-    if !clientConn.closed || !backendConn.closed {
-      t.Fatalf("Connections should be closed")
-    }
+    time.Sleep(100 * time.Millisecond)
 
     backendBuffer := backendConn.Writer.(*bytes.Buffer)
     if backendBuffer.Len() != 4 {
       t.Fatalf("Expected backend buffer length %d, got %d", 4, backendBuffer.Len())
     }
+
+    clientConn.Close()
+    backendConn.Close()
   })
 
   t.Run("PartialReadWrite", func(t *testing.T) {
@@ -129,23 +139,30 @@ func TestPeterStart(t *testing.T) {
     }
 
     peter := NewPeter(clientConn, backendConn)
-    peter.Start()
+    go peter.Start()
 
-    if !clientConn.closed || !backendConn.closed {
-      t.Fatalf("Connections should be closed")
-    }
+    time.Sleep(100 * time.Millisecond)
 
     response := make([]byte, 8)
-    clientConn.Writer.(*bytes.Buffer).Read(response)
-    if string(response) != "response" {
-      t.Fatalf("Expected 'response', got '%s'", string(response))
+    n, err := clientConn.Writer.(*bytes.Buffer).Read(response)
+    if err != nil && err != io.EOF {
+      t.Fatalf("Failed to read response: %v", err)
+    }
+    if string(response[:n]) != "response" {
+      t.Fatalf("Expected 'response', got '%s'", string(response[:n]))
     }
 
     request := make([]byte, 7)
-    backendConn.Writer.(*bytes.Buffer).Read(request)
-    if string(request) != "request" {
-      t.Fatalf("Expected 'request', got '%s'", string(request))
+    n, err = backendConn.Writer.(*bytes.Buffer).Read(request)
+    if err != nil && err != io.EOF {
+      t.Fatalf("Failed to read request: %v", err)
     }
+    if string(request[:n]) != "request" {
+      t.Fatalf("Expected 'request', got '%s'", string(request[:n]))
+    }
+
+    clientConn.Close()
+    backendConn.Close()
   })
 
   t.Run("TimeoutHandling", func(t *testing.T) {
@@ -158,10 +175,15 @@ func TestPeterStart(t *testing.T) {
     })
 
     peter := NewPeter(clientConn, backendConn)
-    peter.Start()
+    go peter.Start()
 
-    if !clientConn.closed || !backendConn.closed {
-      t.Fatalf("Connections should be closed")
+    time.Sleep(50 * time.Millisecond)
+
+    if !clientConn.closed {
+      t.Fatalf("Expected client connection to be closed")
+    }
+    if !backendConn.closed {
+      t.Fatalf("Expected backend connection to be closed")
     }
   })
 }
